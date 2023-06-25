@@ -1,49 +1,54 @@
-const fetch = require("node-fetch");
+const axios = require("axios");
 
 export default async function handler(req, res) {
-  const url = new URL(req.query["url"]);
+  const url = req.query["url"];
+  const params = {};
   for (let i in req.query) {
     if (i !== "url") {
-      url.searchParams.append(i, req.query[i]);
+      params[i] = req.query[i];
     }
   }
 
   const cookie_string = req.headers.cookie || "";
   const useragent = req.headers["user-agent"] || "";
 
-  const header_to_send = {
+  const headers_to_send = {
     Cookie: cookie_string,
     "User-Agent": useragent,
     "content-type": "application/json",
     accept: "*/*",
-    host: url.host,
   };
 
   const options = {
     method: req.method.toUpperCase(),
-    headers: header_to_send,
-    body: req.body,
+    headers: headers_to_send,
+    data: req.body,
+    params: params,
   };
 
   if (
     req.method.toUpperCase() === "GET" ||
     req.method.toUpperCase() === "HEAD"
   ) {
-    delete options.body;
+    delete options.data;
   }
 
-  const response = await fetch(url, options);
-  const response_text = await response.text();
-  const headers = response.headers.raw();
+  try {
+    const response = await axios(url, options);
+    const headers = response.headers;
 
-  let cookie_header = null;
-  if (headers["set-cookie"]) {
-    cookie_header = headers["set-cookie"];
+    let cookie_header = null;
+    if (headers["set-cookie"]) {
+      cookie_header = headers["set-cookie"];
+    }
+
+    res.writeHead(response.status, {
+      "content-type": headers["content-type"] || "text/plain",
+      "set-cookie": cookie_header || [],
+    });
+    res.end(response.data);
+  } catch (error) {
+    console.error(error);
+    res.status(500).send("Internal Server Error");
   }
-
-  res.writeHead(response.status, {
-    "content-type": String(headers["content-type"]) || "text/plain",
-    "set-cookie": cookie_header || [],
-  });
-  res.end(response_text);
 }
